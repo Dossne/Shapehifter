@@ -110,7 +110,7 @@ public class GridGameManager : MonoBehaviour
         textObject.transform.SetParent(canvasObject.transform, false);
 
         hudText = textObject.AddComponent<Text>();
-        hudText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        hudText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         hudText.fontSize = 18;
         hudText.alignment = TextAnchor.UpperLeft;
         hudText.color = Color.white;
