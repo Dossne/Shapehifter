@@ -118,6 +118,11 @@ public class GridGameManager : MonoBehaviour
     private RectTransform hudRectTransform;
     private RectTransform hudSafeAreaRect;
     private GameObject tutorialPanel;
+    private GameObject statusPanel;
+    private VerticalLayoutGroup hudLayoutGroup;
+    private readonly RectOffset hudPadding = new RectOffset(40, 40, 40, 20);
+    private readonly RectOffset hudPaddingCollapsed = new RectOffset(0, 0, 0, 0);
+    private const float HudSpacing = 12f;
     private MobileInputController mobileInput;
     private Sprite squareSprite;
     private string tutorialLine = string.Empty;
@@ -212,14 +217,14 @@ public class GridGameManager : MonoBehaviour
         hudRectTransform.anchoredPosition = Vector2.zero;
         hudRectTransform.sizeDelta = Vector2.zero;
 
-        VerticalLayoutGroup layoutGroup = hudContainer.AddComponent<VerticalLayoutGroup>();
-        layoutGroup.padding = new RectOffset(40, 40, 40, 20);
-        layoutGroup.spacing = 12f;
-        layoutGroup.childAlignment = TextAnchor.UpperLeft;
-        layoutGroup.childControlWidth = true;
-        layoutGroup.childControlHeight = true;
-        layoutGroup.childForceExpandWidth = true;
-        layoutGroup.childForceExpandHeight = false;
+        hudLayoutGroup = hudContainer.AddComponent<VerticalLayoutGroup>();
+        hudLayoutGroup.padding = hudPadding;
+        hudLayoutGroup.spacing = HudSpacing;
+        hudLayoutGroup.childAlignment = TextAnchor.UpperLeft;
+        hudLayoutGroup.childControlWidth = true;
+        hudLayoutGroup.childControlHeight = true;
+        hudLayoutGroup.childForceExpandWidth = true;
+        hudLayoutGroup.childForceExpandHeight = false;
 
         ContentSizeFitter containerFitter = hudContainer.AddComponent<ContentSizeFitter>();
         containerFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
@@ -260,8 +265,27 @@ public class GridGameManager : MonoBehaviour
         tutorialOutline.effectColor = new Color(0f, 0f, 0f, 0.85f);
         tutorialOutline.effectDistance = new Vector2(2f, -2f);
 
+        statusPanel = new GameObject("StatusPanel");
+        statusPanel.transform.SetParent(hudContainer.transform, false);
+        Image statusBackground = statusPanel.AddComponent<Image>();
+        statusBackground.sprite = squareSprite;
+        statusBackground.color = new Color(0f, 0f, 0f, 0.55f);
+        statusBackground.raycastTarget = false;
+
+        VerticalLayoutGroup statusLayout = statusPanel.AddComponent<VerticalLayoutGroup>();
+        statusLayout.padding = new RectOffset(20, 20, 16, 16);
+        statusLayout.childAlignment = TextAnchor.UpperLeft;
+        statusLayout.childControlWidth = true;
+        statusLayout.childControlHeight = true;
+        statusLayout.childForceExpandWidth = true;
+        statusLayout.childForceExpandHeight = false;
+
+        ContentSizeFitter statusFitter = statusPanel.AddComponent<ContentSizeFitter>();
+        statusFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        statusFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
         GameObject statusObject = new GameObject("StatusText");
-        statusObject.transform.SetParent(hudContainer.transform, false);
+        statusObject.transform.SetParent(statusPanel.transform, false);
         statusText = statusObject.AddComponent<TextMeshProUGUI>();
         statusText.fontSize = 36f;
         statusText.alignment = TextAlignmentOptions.TopLeft;
@@ -352,7 +376,6 @@ public class GridGameManager : MonoBehaviour
         }
 
         UpdateHud();
-        UpdateCamera();
     }
 
     private void ParseCell(char cell, Vector2Int position)
@@ -697,9 +720,10 @@ public class GridGameManager : MonoBehaviour
 
     private void UpdateHud()
     {
+        string statusLine = string.Empty;
         if (statusText != null)
         {
-            string statusLine = $"Form: {currentForm} | Shifts: {shapeshiftsRemaining}";
+            statusLine = $"Form: {currentForm} | Shifts: {shapeshiftsRemaining}";
             if (TryGetNextAvailableForm(out Form nextForm))
             {
                 statusLine += $" | {nextForm} - Tap to Change";
@@ -713,10 +737,26 @@ public class GridGameManager : MonoBehaviour
             tutorialText.text = tutorialLine;
         }
 
+        bool showTutorial = !string.IsNullOrWhiteSpace(tutorialLine);
         if (tutorialPanel != null)
         {
-            tutorialPanel.SetActive(!string.IsNullOrWhiteSpace(tutorialLine));
+            tutorialPanel.SetActive(showTutorial);
         }
+
+        bool showStatus = !string.IsNullOrWhiteSpace(statusLine);
+        if (statusPanel != null)
+        {
+            statusPanel.SetActive(showStatus);
+        }
+
+        if (hudLayoutGroup != null)
+        {
+            bool showHud = showTutorial || showStatus;
+            hudLayoutGroup.padding = showHud ? hudPadding : hudPaddingCollapsed;
+            hudLayoutGroup.spacing = showHud ? HudSpacing : 0f;
+        }
+
+        UpdateCamera();
     }
 
     private bool HasSafeAreaChanged()
@@ -753,6 +793,8 @@ public class GridGameManager : MonoBehaviour
 
         lastSafeArea = safeArea;
         lastScreenSize = new Vector2Int(Screen.width, Screen.height);
+
+        UpdateCamera();
     }
 
     public void RequestMove(Vector2Int direction)
@@ -864,6 +906,17 @@ public class GridGameManager : MonoBehaviour
         return position == doorPosition;
     }
 
+    private float GetHudHeightPixels()
+    {
+        if (hudRectTransform == null || hudCanvas == null)
+        {
+            return 0f;
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(hudRectTransform);
+        return Mathf.Max(0f, hudRectTransform.rect.height * hudCanvas.scaleFactor);
+    }
+
     private void UpdateCamera()
     {
         Camera camera = Camera.main;
@@ -880,14 +933,23 @@ public class GridGameManager : MonoBehaviour
         float bottomPadding = tileSize * 0.5f;
         float topPadding = tileSize * 1.5f;
 
-        float sizeForHeight = (gridWorldHeight + topPadding + bottomPadding) * 0.5f;
+        float hudHeightPixels = GetHudHeightPixels();
+        float availableHeightFraction = 1f;
+        if (Screen.height > 0)
+        {
+            availableHeightFraction = Mathf.Clamp01(1f - (hudHeightPixels / Screen.height));
+        }
+        availableHeightFraction = Mathf.Max(availableHeightFraction, 0.1f);
+
+        float sizeForHeight = (gridWorldHeight + topPadding + bottomPadding) * 0.5f / availableHeightFraction;
         float sizeForWidth = (gridWorldWidth + horizontalPadding * 2f) * 0.5f / aspect;
         float size = Mathf.Max(sizeForHeight, sizeForWidth);
 
         float gridLeftEdge = -tileSize * 0.5f;
         float gridTopEdge = tileSize * 0.5f;
         float centerX = gridLeftEdge + gridWorldWidth * 0.5f;
-        float centerY = gridTopEdge + topPadding - size;
+        float hudWorldHeight = (1f - availableHeightFraction) * size * 2f;
+        float centerY = gridTopEdge + topPadding - size + hudWorldHeight;
 
         camera.transform.position = new Vector3(centerX, centerY, -10f);
         camera.orthographicSize = size;
