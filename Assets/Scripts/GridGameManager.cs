@@ -4,6 +4,70 @@ using UnityEngine.UI;
 
 public class GridGameManager : MonoBehaviour
 {
+    private static class SpriteCatalog
+    {
+        public const string TilesFolder = "Art/Tiles/";
+        public const string ObjectsFolder = "Art/Objects/";
+        public const string TokensFolder = "Art/Tokens/";
+
+        public const string TileFloor = "floor";
+        public const string TileWaterShallow = "water_shallow";
+        public const string TileWaterDeep = "water_deep";
+        public const string TileStoneWall = "stone_wall";
+        public const string TileDirtWall = "dirt_wall";
+
+        public const string ObjectBoulder = "boulder";
+        public const string ObjectKey = "key";
+        public const string ObjectDoor = "door";
+        public const string ObjectSpikes = "spikes";
+
+        public const string TokenChameleon = "chameleon";
+        public const string TokenFrog = "frog";
+        public const string TokenGorilla = "gorilla";
+        public const string TokenMole = "mole";
+
+        public static readonly Dictionary<string, string> TileSprites = new Dictionary<string, string>
+        {
+            { TileFloor, TileFloor },
+            { TileWaterShallow, TileWaterShallow },
+            { TileWaterDeep, TileWaterDeep },
+            { TileStoneWall, TileStoneWall },
+            { TileDirtWall, TileDirtWall }
+        };
+
+        public static readonly Dictionary<string, string> ObjectSprites = new Dictionary<string, string>
+        {
+            { ObjectBoulder, ObjectBoulder },
+            { ObjectKey, ObjectKey },
+            { ObjectDoor, ObjectDoor },
+            { ObjectSpikes, ObjectSpikes }
+        };
+
+        public static readonly Dictionary<string, string> TokenSprites = new Dictionary<string, string>
+        {
+            { TokenChameleon, TokenChameleon },
+            { TokenFrog, TokenFrog },
+            { TokenGorilla, TokenGorilla },
+            { TokenMole, TokenMole }
+        };
+
+        public static readonly Dictionary<TileType, string> TileTypeToKey = new Dictionary<TileType, string>
+        {
+            { TileType.Floor, TileFloor },
+            { TileType.Wall, TileStoneWall },
+            { TileType.Dirt, TileDirtWall },
+            { TileType.Water, TileWaterShallow }
+        };
+
+        public static readonly Dictionary<Form, string> FormToTokenKey = new Dictionary<Form, string>
+        {
+            { Form.Chameleon, TokenChameleon },
+            { Form.Frog, TokenFrog },
+            { Form.Gorilla, TokenGorilla },
+            { Form.Mole, TokenMole }
+        };
+    }
+
     private enum TileType
     {
         Floor,
@@ -192,28 +256,29 @@ public class GridGameManager : MonoBehaviour
         {
             case '#':
                 tiles[position] = TileType.Wall;
-                CreateTile(position, new Color(0.25f, 0.25f, 0.25f));
+                CreateTile(position, TileType.Wall, new Color(0.25f, 0.25f, 0.25f));
                 break;
             case 'd':
                 tiles[position] = TileType.Dirt;
-                CreateTile(position, new Color(0.55f, 0.35f, 0.2f));
+                CreateTile(position, TileType.Dirt, new Color(0.55f, 0.35f, 0.2f));
                 break;
             case 'w':
                 tiles[position] = TileType.Water;
-                CreateTile(position, new Color(0.2f, 0.45f, 0.8f));
+                CreateTile(position, TileType.Water, new Color(0.2f, 0.45f, 0.8f));
                 break;
             case 'b':
                 CreateFloor(position);
-                CreateObject(position, new Color(0.35f, 0.35f, 0.35f), boulders);
+                CreateObject(position, SpriteCatalog.ObjectBoulder, new Color(0.35f, 0.35f, 0.35f), boulders);
                 break;
             case 'k':
                 CreateFloor(position);
-                CreateObject(position, new Color(1f, 0.9f, 0.1f), keys);
+                CreateObject(position, SpriteCatalog.ObjectKey, new Color(1f, 0.9f, 0.1f), keys);
                 break;
             case 'D':
                 CreateFloor(position);
                 doorPosition = position;
-                doorObject = CreateSingleObject(position, new Color(0.8f, 0.2f, 0.2f));
+                doorObject = CreateSingleObject(position, SpriteCatalog.ObjectDoor, new Color(0.8f, 0.2f, 0.2f));
+                UpdateDoorVisual();
                 break;
             case 'P':
                 CreateFloor(position);
@@ -242,42 +307,54 @@ public class GridGameManager : MonoBehaviour
     private void CreateFloor(Vector2Int position)
     {
         tiles[position] = TileType.Floor;
-        CreateTile(position, new Color(0.75f, 0.75f, 0.75f));
+        CreateTile(position, TileType.Floor, new Color(0.75f, 0.75f, 0.75f));
     }
 
-    private void CreateTile(Vector2Int position, Color color)
+    private void CreateTile(Vector2Int position, TileType type, Color color)
     {
         GameObject tile = new GameObject("Tile_" + position.x + "_" + position.y);
         tile.transform.SetParent(levelRoot.transform, false);
         tile.transform.localPosition = new Vector3(position.x * tileSize, position.y * tileSize, 0f);
         SpriteRenderer renderer = tile.AddComponent<SpriteRenderer>();
-        renderer.sprite = squareSprite;
-        renderer.color = color;
+        string spriteKey = SpriteCatalog.TileTypeToKey[type];
+        string spriteName = SpriteCatalog.TileSprites[spriteKey];
+        ApplySpriteOrFallback(renderer, SpriteCatalog.TilesFolder, spriteName, color);
         renderer.sortingOrder = 0;
     }
 
-    private void CreateObject(Vector2Int position, Color color, Dictionary<Vector2Int, GameObject> bucket)
+    private void CreateObject(Vector2Int position, string spriteKey, Color color, Dictionary<Vector2Int, GameObject> bucket)
     {
-        GameObject obj = CreateSingleObject(position, color);
+        GameObject obj = CreateSingleObject(position, spriteKey, color);
         bucket[position] = obj;
     }
 
     private void CreateToken(Vector2Int position, Form form, Color color)
     {
-        GameObject obj = CreateSingleObject(position, color);
+        string spriteKey = SpriteCatalog.FormToTokenKey[form];
+        GameObject obj = CreateSingleObject(position, spriteKey, color, SpriteCatalog.TokensFolder, SpriteCatalog.TokenSprites);
         tokens[position] = obj;
         obj.name = form + "Token";
     }
 
-    private GameObject CreateSingleObject(Vector2Int position, Color color)
+    private GameObject CreateSingleObject(Vector2Int position, string spriteKey, Color color)
+    {
+        return CreateSingleObject(position, spriteKey, color, SpriteCatalog.ObjectsFolder, SpriteCatalog.ObjectSprites);
+    }
+
+    private GameObject CreateSingleObject(
+        Vector2Int position,
+        string spriteKey,
+        Color color,
+        string folder,
+        Dictionary<string, string> spriteTable)
     {
         GameObject obj = new GameObject("Object_" + position.x + "_" + position.y);
         obj.transform.SetParent(levelRoot.transform, false);
         obj.transform.localPosition = new Vector3(position.x * tileSize, position.y * tileSize, -0.1f);
         obj.transform.localScale = Vector3.one * 0.9f;
         SpriteRenderer renderer = obj.AddComponent<SpriteRenderer>();
-        renderer.sprite = squareSprite;
-        renderer.color = color;
+        string spriteName = spriteTable[spriteKey];
+        ApplySpriteOrFallback(renderer, folder, spriteName, color);
         renderer.sortingOrder = 1;
         return obj;
     }
@@ -288,14 +365,13 @@ public class GridGameManager : MonoBehaviour
         {
             playerObject = new GameObject("Player");
             SpriteRenderer renderer = playerObject.AddComponent<SpriteRenderer>();
-            renderer.sprite = squareSprite;
             renderer.sortingOrder = 2;
             playerObject.transform.localScale = Vector3.one * 0.85f;
         }
 
         playerObject.transform.SetParent(levelRoot.transform, false);
         playerObject.transform.localPosition = new Vector3(position.x * tileSize, position.y * tileSize, -0.2f);
-        UpdatePlayerColor();
+        UpdatePlayerVisual();
     }
 
     private void UpdatePlayerPosition(Vector2Int position)
@@ -307,7 +383,7 @@ public class GridGameManager : MonoBehaviour
         }
     }
 
-    private void UpdatePlayerColor()
+    private void UpdatePlayerVisual()
     {
         if (playerObject == null)
         {
@@ -331,7 +407,9 @@ public class GridGameManager : MonoBehaviour
                 break;
         }
 
-        playerObject.GetComponent<SpriteRenderer>().color = color;
+        string spriteKey = SpriteCatalog.FormToTokenKey[currentForm];
+        SpriteRenderer renderer = playerObject.GetComponent<SpriteRenderer>();
+        ApplySpriteOrFallback(renderer, SpriteCatalog.TokensFolder, SpriteCatalog.TokenSprites[spriteKey], color);
     }
 
     private Vector2Int GetMoveDirection()
@@ -493,7 +571,7 @@ public class GridGameManager : MonoBehaviour
                 {
                     currentForm = candidate;
                     shapeshiftsRemaining--;
-                    UpdatePlayerColor();
+                    UpdatePlayerVisual();
                     UpdateHud();
                 }
                 break;
@@ -518,6 +596,30 @@ public class GridGameManager : MonoBehaviour
 
         SpriteRenderer renderer = doorObject.GetComponent<SpriteRenderer>();
         renderer.color = doorOpen ? new Color(0.2f, 0.8f, 0.2f) : new Color(0.8f, 0.2f, 0.2f);
+    }
+
+    private void ApplySpriteOrFallback(SpriteRenderer renderer, string folder, string spriteName, Color fallbackColor)
+    {
+        Sprite sprite = LoadSprite(folder, spriteName);
+        if (sprite != null)
+        {
+            renderer.sprite = sprite;
+            renderer.color = Color.white;
+            return;
+        }
+
+        renderer.sprite = squareSprite;
+        renderer.color = fallbackColor;
+    }
+
+    private Sprite LoadSprite(string folder, string spriteName)
+    {
+        if (string.IsNullOrEmpty(spriteName))
+        {
+            return null;
+        }
+
+        return Resources.Load<Sprite>(folder + spriteName);
     }
 
     private void ReloadLevel()
