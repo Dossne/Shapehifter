@@ -13,7 +13,7 @@ public class GridGameManager : MonoBehaviour
         public const string TileFloor = "floor";
         public const string TileWaterShallow = "water_shallow";
         public const string TileWaterDeep = "water_deep";
-        public const string TileStoneWall = "stone_wall";
+        public const string TileStoneWall = "tile_stone_wall";
         public const string TileDirtWall = "dirt_wall";
 
         public const string ObjectBoulder = "boulder";
@@ -241,7 +241,7 @@ public class GridGameManager : MonoBehaviour
             for (int x = 0; x < row.Length; x++)
             {
                 char cell = row[x];
-                Vector2Int gridPosition = new Vector2Int(x, levelHeight - 1 - y);
+                Vector2Int gridPosition = new Vector2Int(x, -y);
                 ParseCell(cell, gridPosition);
             }
         }
@@ -692,7 +692,7 @@ public class GridGameManager : MonoBehaviour
         }
 
         float centerX = (levelWidth - 1) * tileSize * 0.5f;
-        float centerY = (levelHeight - 1) * tileSize * 0.5f;
+        float centerY = -(levelHeight - 1) * tileSize * 0.5f;
         camera.transform.position = new Vector3(centerX, centerY, -10f);
         float size = Mathf.Max(levelWidth, levelHeight) * 0.5f + 1f;
         camera.orthographicSize = size;
