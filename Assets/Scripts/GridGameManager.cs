@@ -112,18 +112,24 @@ public class GridGameManager : MonoBehaviour
     private int currentLevelIndex;
     private GameObject levelRoot;
 
-    private TextMeshProUGUI hudText;
+    private TextMeshProUGUI tutorialText;
+    private TextMeshProUGUI statusText;
     private Canvas hudCanvas;
     private RectTransform hudRectTransform;
+    private RectTransform hudSafeAreaRect;
+    private GameObject tutorialPanel;
     private MobileInputController mobileInput;
     private Sprite squareSprite;
     private string tutorialLine = string.Empty;
+    private Rect lastSafeArea;
+    private Vector2Int lastScreenSize;
 
     private int levelWidth;
     private int levelHeight;
 
     private void Awake()
     {
+        ConfigureOrientation();
         CreateSprite();
         CreateHud();
         EnsureMobileInput();
@@ -132,6 +138,11 @@ public class GridGameManager : MonoBehaviour
 
     private void Update()
     {
+        if (hudSafeAreaRect != null && HasSafeAreaChanged())
+        {
+            ApplySafeArea();
+        }
+
         if (Input.GetKeyDown(KeyCode.R))
         {
             ReloadLevel();
@@ -163,9 +174,18 @@ public class GridGameManager : MonoBehaviour
         squareSprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
     }
 
+    private void ConfigureOrientation()
+    {
+        Screen.orientation = ScreenOrientation.Portrait;
+        Screen.autorotateToPortrait = true;
+        Screen.autorotateToPortraitUpsideDown = false;
+        Screen.autorotateToLandscapeLeft = false;
+        Screen.autorotateToLandscapeRight = false;
+    }
+
     private void CreateHud()
     {
-        if (hudText != null)
+        if (statusText != null)
         {
             return;
         }
@@ -179,21 +199,81 @@ public class GridGameManager : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         canvasObject.AddComponent<GraphicRaycaster>();
 
-        GameObject textObject = new GameObject("HudText");
-        textObject.transform.SetParent(canvasObject.transform, false);
+        GameObject safeAreaObject = new GameObject("HudSafeArea");
+        safeAreaObject.transform.SetParent(canvasObject.transform, false);
+        hudSafeAreaRect = safeAreaObject.AddComponent<RectTransform>();
 
-        hudText = textObject.AddComponent<TextMeshProUGUI>();
-        hudText.fontSize = 48f;
-        hudText.alignment = TextAlignmentOptions.TopLeft;
-        hudText.color = Color.white;
-        hudText.enableWordWrapping = true;
-
-        hudRectTransform = hudText.rectTransform;
+        GameObject hudContainer = new GameObject("HudContainer");
+        hudContainer.transform.SetParent(safeAreaObject.transform, false);
+        hudRectTransform = hudContainer.AddComponent<RectTransform>();
         hudRectTransform.anchorMin = new Vector2(0f, 1f);
         hudRectTransform.anchorMax = new Vector2(1f, 1f);
-        hudRectTransform.pivot = new Vector2(0f, 1f);
-        hudRectTransform.anchoredPosition = new Vector2(40f, -40f);
-        hudRectTransform.sizeDelta = new Vector2(-80f, 180f);
+        hudRectTransform.pivot = new Vector2(0.5f, 1f);
+        hudRectTransform.anchoredPosition = Vector2.zero;
+        hudRectTransform.sizeDelta = Vector2.zero;
+
+        VerticalLayoutGroup layoutGroup = hudContainer.AddComponent<VerticalLayoutGroup>();
+        layoutGroup.padding = new RectOffset(40, 40, 40, 20);
+        layoutGroup.spacing = 12f;
+        layoutGroup.childAlignment = TextAnchor.UpperLeft;
+        layoutGroup.childControlWidth = true;
+        layoutGroup.childControlHeight = true;
+        layoutGroup.childForceExpandWidth = true;
+        layoutGroup.childForceExpandHeight = false;
+
+        ContentSizeFitter containerFitter = hudContainer.AddComponent<ContentSizeFitter>();
+        containerFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        containerFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        tutorialPanel = new GameObject("TutorialPanel");
+        tutorialPanel.transform.SetParent(hudContainer.transform, false);
+        Image tutorialBackground = tutorialPanel.AddComponent<Image>();
+        tutorialBackground.sprite = squareSprite;
+        tutorialBackground.color = new Color(0f, 0f, 0f, 0.6f);
+        tutorialBackground.raycastTarget = false;
+
+        VerticalLayoutGroup tutorialLayout = tutorialPanel.AddComponent<VerticalLayoutGroup>();
+        tutorialLayout.padding = new RectOffset(24, 24, 20, 20);
+        tutorialLayout.childAlignment = TextAnchor.UpperLeft;
+        tutorialLayout.childControlWidth = true;
+        tutorialLayout.childControlHeight = true;
+        tutorialLayout.childForceExpandWidth = true;
+        tutorialLayout.childForceExpandHeight = false;
+
+        ContentSizeFitter tutorialFitter = tutorialPanel.AddComponent<ContentSizeFitter>();
+        tutorialFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        tutorialFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        GameObject tutorialTextObject = new GameObject("TutorialText");
+        tutorialTextObject.transform.SetParent(tutorialPanel.transform, false);
+        tutorialText = tutorialTextObject.AddComponent<TextMeshProUGUI>();
+        tutorialText.fontSize = 64f;
+        tutorialText.enableAutoSizing = true;
+        tutorialText.fontSizeMin = 48f;
+        tutorialText.fontSizeMax = 72f;
+        tutorialText.alignment = TextAlignmentOptions.TopLeft;
+        tutorialText.color = Color.white;
+        tutorialText.enableWordWrapping = true;
+        tutorialText.raycastTarget = false;
+
+        Outline tutorialOutline = tutorialTextObject.AddComponent<Outline>();
+        tutorialOutline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        tutorialOutline.effectDistance = new Vector2(2f, -2f);
+
+        GameObject statusObject = new GameObject("StatusText");
+        statusObject.transform.SetParent(hudContainer.transform, false);
+        statusText = statusObject.AddComponent<TextMeshProUGUI>();
+        statusText.fontSize = 36f;
+        statusText.alignment = TextAlignmentOptions.TopLeft;
+        statusText.color = Color.white;
+        statusText.enableWordWrapping = true;
+        statusText.raycastTarget = false;
+
+        Outline statusOutline = statusObject.AddComponent<Outline>();
+        statusOutline.effectColor = new Color(0f, 0f, 0f, 0.7f);
+        statusOutline.effectDistance = new Vector2(1.5f, -1.5f);
+
+        ApplySafeArea();
     }
 
     private void EnsureMobileInput()
@@ -617,7 +697,7 @@ public class GridGameManager : MonoBehaviour
 
     private void UpdateHud()
     {
-        if (hudText != null)
+        if (statusText != null)
         {
             string statusLine = $"Form: {currentForm} | Shifts: {shapeshiftsRemaining}";
             if (TryGetNextAvailableForm(out Form nextForm))
@@ -625,8 +705,54 @@ public class GridGameManager : MonoBehaviour
                 statusLine += $" | {nextForm} - Tap to Change";
             }
 
-            hudText.text = $"{tutorialLine}\n{statusLine}";
+            statusText.text = statusLine;
         }
+
+        if (tutorialText != null)
+        {
+            tutorialText.text = tutorialLine;
+        }
+
+        if (tutorialPanel != null)
+        {
+            tutorialPanel.SetActive(!string.IsNullOrWhiteSpace(tutorialLine));
+        }
+    }
+
+    private bool HasSafeAreaChanged()
+    {
+        if (lastScreenSize.x != Screen.width || lastScreenSize.y != Screen.height)
+        {
+            return true;
+        }
+
+        Rect safeArea = Screen.safeArea;
+        return safeArea != lastSafeArea;
+    }
+
+    private void ApplySafeArea()
+    {
+        if (hudSafeAreaRect == null)
+        {
+            return;
+        }
+
+        Rect safeArea = Screen.safeArea;
+        Vector2 screenSize = new Vector2(Screen.width, Screen.height);
+        Vector2 anchorMin = safeArea.position;
+        Vector2 anchorMax = safeArea.position + safeArea.size;
+        anchorMin.x /= screenSize.x;
+        anchorMin.y /= screenSize.y;
+        anchorMax.x /= screenSize.x;
+        anchorMax.y /= screenSize.y;
+
+        hudSafeAreaRect.anchorMin = anchorMin;
+        hudSafeAreaRect.anchorMax = anchorMax;
+        hudSafeAreaRect.offsetMin = Vector2.zero;
+        hudSafeAreaRect.offsetMax = Vector2.zero;
+
+        lastSafeArea = safeArea;
+        lastScreenSize = new Vector2Int(Screen.width, Screen.height);
     }
 
     public void RequestMove(Vector2Int direction)
