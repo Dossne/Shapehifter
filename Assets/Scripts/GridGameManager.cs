@@ -13,7 +13,7 @@ public class GridGameManager : MonoBehaviour
         public const string TileFloor = "floor";
         public const string TileWaterShallow = "water_shallow";
         public const string TileWaterDeep = "water_deep";
-        public const string TileStoneWall = "tile_stone_wall";
+        public const string TileStoneWall = "stone_wall";
         public const string TileDirtWall = "dirt_wall";
 
         public const string ObjectBoulder = "boulder";
