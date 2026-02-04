@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -111,8 +112,12 @@ public class GridGameManager : MonoBehaviour
     private int currentLevelIndex;
     private GameObject levelRoot;
 
-    private Text hudText;
+    private TextMeshProUGUI hudText;
+    private Canvas hudCanvas;
+    private RectTransform hudRectTransform;
+    private MobileInputController mobileInput;
     private Sprite squareSprite;
+    private string tutorialLine = string.Empty;
 
     private int levelWidth;
     private int levelHeight;
@@ -121,6 +126,7 @@ public class GridGameManager : MonoBehaviour
     {
         CreateSprite();
         CreateHud();
+        EnsureMobileInput();
         LoadLevel(0);
     }
 
@@ -165,26 +171,43 @@ public class GridGameManager : MonoBehaviour
         }
 
         GameObject canvasObject = new GameObject("HUD");
-        Canvas canvas = canvasObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvasObject.AddComponent<CanvasScaler>();
+        hudCanvas = canvasObject.AddComponent<Canvas>();
+        hudCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1080f, 1920f);
+        scaler.matchWidthOrHeight = 0.5f;
         canvasObject.AddComponent<GraphicRaycaster>();
 
         GameObject textObject = new GameObject("HudText");
         textObject.transform.SetParent(canvasObject.transform, false);
 
-        hudText = textObject.AddComponent<Text>();
-        hudText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        hudText.fontSize = 18;
-        hudText.alignment = TextAnchor.UpperLeft;
+        hudText = textObject.AddComponent<TextMeshProUGUI>();
+        hudText.fontSize = 48f;
+        hudText.alignment = TextAlignmentOptions.TopLeft;
         hudText.color = Color.white;
+        hudText.enableWordWrapping = true;
 
-        RectTransform rectTransform = hudText.rectTransform;
-        rectTransform.anchorMin = new Vector2(0f, 1f);
-        rectTransform.anchorMax = new Vector2(0f, 1f);
-        rectTransform.pivot = new Vector2(0f, 1f);
-        rectTransform.anchoredPosition = new Vector2(10f, -10f);
-        rectTransform.sizeDelta = new Vector2(400f, 80f);
+        hudRectTransform = hudText.rectTransform;
+        hudRectTransform.anchorMin = new Vector2(0f, 1f);
+        hudRectTransform.anchorMax = new Vector2(1f, 1f);
+        hudRectTransform.pivot = new Vector2(0f, 1f);
+        hudRectTransform.anchoredPosition = new Vector2(40f, -40f);
+        hudRectTransform.sizeDelta = new Vector2(-80f, 180f);
+    }
+
+    private void EnsureMobileInput()
+    {
+        if (mobileInput == null)
+        {
+            mobileInput = GetComponent<MobileInputController>();
+            if (mobileInput == null)
+            {
+                mobileInput = gameObject.AddComponent<MobileInputController>();
+            }
+        }
+
+        mobileInput.Initialize(this, hudRectTransform, hudCanvas);
     }
 
     private void LoadLevel(int index)
@@ -217,8 +240,10 @@ public class GridGameManager : MonoBehaviour
 
         string[] lines = levelAsset.text.Replace("\r", string.Empty).Split('\n');
         List<string> rows = new List<string>();
-        foreach (string line in lines)
+        tutorialLine = lines.Length > 0 ? lines[0].TrimEnd() : string.Empty;
+        for (int i = 1; i < lines.Length; i++)
         {
+            string line = lines[i];
             if (!string.IsNullOrWhiteSpace(line))
             {
                 rows.Add(line.TrimEnd());
@@ -553,9 +578,24 @@ public class GridGameManager : MonoBehaviour
 
     private void TryCycleForm()
     {
-        if (shapeshiftsRemaining <= 0)
+        if (!TryGetNextAvailableForm(out Form nextForm))
         {
             return;
+        }
+
+        currentForm = nextForm;
+        shapeshiftsRemaining--;
+        UpdatePlayerVisual();
+        UpdateHud();
+    }
+
+    private bool TryGetNextAvailableForm(out Form nextForm)
+    {
+        nextForm = currentForm;
+
+        if (shapeshiftsRemaining <= 0 || availableForms.Count <= 1)
+        {
+            return false;
         }
 
         int currentIndex = formOrder.IndexOf(currentForm);
@@ -565,26 +605,41 @@ public class GridGameManager : MonoBehaviour
         {
             nextIndex = (nextIndex + 1) % formOrder.Count;
             Form candidate = formOrder[nextIndex];
-            if (availableForms.Contains(candidate))
+            if (availableForms.Contains(candidate) && candidate != currentForm)
             {
-                if (candidate != currentForm)
-                {
-                    currentForm = candidate;
-                    shapeshiftsRemaining--;
-                    UpdatePlayerVisual();
-                    UpdateHud();
-                }
-                break;
+                nextForm = candidate;
+                return true;
             }
         }
+
+        return false;
     }
 
     private void UpdateHud()
     {
         if (hudText != null)
         {
-            hudText.text = $"Form: {currentForm} | Shifts: {shapeshiftsRemaining}";
+            string statusLine = $"Form: {currentForm} | Shifts: {shapeshiftsRemaining}";
+            if (TryGetNextAvailableForm(out Form nextForm))
+            {
+                statusLine += $" | {nextForm} - Tap to Change";
+            }
+
+            hudText.text = $"{tutorialLine}\n{statusLine}";
         }
+    }
+
+    public void RequestMove(Vector2Int direction)
+    {
+        if (direction != Vector2Int.zero)
+        {
+            AttemptMove(direction);
+        }
+    }
+
+    public void RequestCycleForm()
+    {
+        TryCycleForm();
     }
 
     private void UpdateDoorVisual()
@@ -691,10 +746,24 @@ public class GridGameManager : MonoBehaviour
             return;
         }
 
-        float centerX = (levelWidth - 1) * tileSize * 0.5f;
-        float centerY = -(levelHeight - 1) * tileSize * 0.5f;
+        float gridWorldWidth = levelWidth * tileSize;
+        float gridWorldHeight = levelHeight * tileSize;
+        float aspect = camera.aspect;
+
+        float horizontalPadding = tileSize * 0.5f;
+        float bottomPadding = tileSize * 0.5f;
+        float topPadding = tileSize * 1.5f;
+
+        float sizeForHeight = (gridWorldHeight + topPadding + bottomPadding) * 0.5f;
+        float sizeForWidth = (gridWorldWidth + horizontalPadding * 2f) * 0.5f / aspect;
+        float size = Mathf.Max(sizeForHeight, sizeForWidth);
+
+        float gridLeftEdge = -tileSize * 0.5f;
+        float gridTopEdge = tileSize * 0.5f;
+        float centerX = gridLeftEdge + gridWorldWidth * 0.5f;
+        float centerY = gridTopEdge + topPadding - size;
+
         camera.transform.position = new Vector3(centerX, centerY, -10f);
-        float size = Mathf.Max(levelWidth, levelHeight) * 0.5f + 1f;
         camera.orthographicSize = size;
     }
 }

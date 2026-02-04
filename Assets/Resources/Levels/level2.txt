@@ -1,3 +1,4 @@
+Frog Can Leap 2 Tiles. Touch Frog and take its Form
 #########
 #P.Fw.kD#
 #...#...#
