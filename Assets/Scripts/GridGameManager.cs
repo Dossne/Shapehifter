@@ -445,7 +445,7 @@ public class GridGameManager : MonoBehaviour
 
     private bool TryBuildLevel(TextAsset levelAsset)
     {
-        shapeshiftsRemaining = shapeshiftsPerLevel;
+        shapeshiftsRemaining = 0;
         hasKey = false;
         doorOpen = false;
         currentForm = Form.Chameleon;
@@ -811,6 +811,8 @@ public class GridGameManager : MonoBehaviour
         {
             Form unlocked = GetTokenForm(tokenObj.name);
             availableForms.Add(unlocked);
+            Debug.Log($"Picked up {unlocked} token. Awarding shifts.");
+            AddShifts(2, $"Token pickup: {unlocked}");
             tokens.Remove(playerPosition);
             Destroy(tokenObj);
         }
@@ -844,9 +846,29 @@ public class GridGameManager : MonoBehaviour
         return Form.Chameleon;
     }
 
+    private void AddShifts(int amount, string reason)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        ChangeShifts(amount, reason);
+    }
+
+    private void ChangeShifts(int delta, string reason)
+    {
+        int before = shapeshiftsRemaining;
+        shapeshiftsRemaining = Mathf.Max(0, shapeshiftsRemaining + delta);
+        if (before != shapeshiftsRemaining)
+        {
+            Debug.Log($"Shifts {before} -> {shapeshiftsRemaining} ({reason})");
+        }
+    }
+
     private void TryCycleForm()
     {
-        if (!TryGetNextAvailableForm(out Form nextForm))
+        if (!TryGetNextAvailableForm(out Form nextForm, out bool spendsShift))
         {
             return;
         }
@@ -856,7 +878,10 @@ public class GridGameManager : MonoBehaviour
         Color previousColor = renderer != null ? renderer.color : Color.white;
 
         currentForm = nextForm;
-        shapeshiftsRemaining--;
+        if (spendsShift)
+        {
+            ChangeShifts(-1, $"Shift into {nextForm}");
+        }
         UpdatePlayerVisual();
 
         if (renderer != null)
@@ -872,9 +897,32 @@ public class GridGameManager : MonoBehaviour
 
     private bool TryGetNextAvailableForm(out Form nextForm)
     {
-        nextForm = currentForm;
+        return TryGetNextAvailableForm(out nextForm, out _);
+    }
 
-        if (shapeshiftsRemaining <= 0 || availableForms.Count <= 1)
+    private bool TryGetNextAvailableForm(out Form nextForm, out bool spendsShift)
+    {
+        nextForm = currentForm;
+        spendsShift = false;
+
+        if (availableForms.Count <= 1)
+        {
+            return false;
+        }
+
+        if (currentForm != Form.Chameleon && shapeshiftsRemaining <= 0)
+        {
+            if (availableForms.Contains(Form.Chameleon))
+            {
+                nextForm = Form.Chameleon;
+                spendsShift = false;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (currentForm == Form.Chameleon && shapeshiftsRemaining <= 0)
         {
             return false;
         }
@@ -889,6 +937,7 @@ public class GridGameManager : MonoBehaviour
             if (availableForms.Contains(candidate) && candidate != currentForm)
             {
                 nextForm = candidate;
+                spendsShift = candidate != Form.Chameleon;
                 return true;
             }
         }
