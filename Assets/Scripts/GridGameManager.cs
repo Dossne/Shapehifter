@@ -582,6 +582,12 @@ public class GridGameManager : MonoBehaviour
         GameObject tile = new GameObject("Tile_" + position.x + "_" + position.y);
         tile.transform.SetParent(levelRoot.transform, false);
         tile.transform.localPosition = new Vector3(position.x * tileSize, position.y * tileSize, 0f);
+        tile.transform.localScale = type switch
+        {
+            TileType.Water => new Vector3(0.75f, 0.75f, 1f),
+            TileType.Wall => new Vector3(0.9f, 0.9f, 1f),
+            _ => Vector3.one
+        };
         SpriteRenderer renderer = tile.AddComponent<SpriteRenderer>();
         string spriteKey = SpriteCatalog.TileTypeToKey[type];
         string spriteName = SpriteCatalog.TileSprites[spriteKey];
