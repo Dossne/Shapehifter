@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -20,6 +21,7 @@ public class GridGameManager : MonoBehaviour
         public const string ObjectBoulder = "boulder";
         public const string ObjectKey = "key";
         public const string ObjectDoor = "door";
+        public const string ObjectDoorOpened = "door_opened";
         public const string ObjectSpikes = "spikes";
 
         public const string TokenChameleon = "chameleon";
@@ -41,6 +43,7 @@ public class GridGameManager : MonoBehaviour
             { ObjectBoulder, ObjectBoulder },
             { ObjectKey, ObjectKey },
             { ObjectDoor, ObjectDoor },
+            { ObjectDoorOpened, ObjectDoorOpened },
             { ObjectSpikes, ObjectSpikes }
         };
 
@@ -98,6 +101,7 @@ public class GridGameManager : MonoBehaviour
     private GameObject doorObject;
     private Vector2Int doorPosition;
     private bool doorOpen;
+    private Coroutine doorBounceRoutine;
 
     private GameObject playerObject;
     private Vector2Int playerPosition;
@@ -407,7 +411,7 @@ public class GridGameManager : MonoBehaviour
             case 'D':
                 CreateFloor(position);
                 doorPosition = position;
-                doorObject = CreateSingleObject(position, SpriteCatalog.ObjectDoor, new Color(0.8f, 0.2f, 0.2f));
+                doorObject = CreateSingleObject(position, SpriteCatalog.ObjectDoor, Color.white);
                 UpdateDoorVisual();
                 break;
             case 'P':
@@ -641,8 +645,12 @@ public class GridGameManager : MonoBehaviour
             keys.Remove(playerPosition);
             Destroy(keyObj);
             hasKey = true;
-            doorOpen = true;
-            UpdateDoorVisual();
+            if (!doorOpen)
+            {
+                doorOpen = true;
+                UpdateDoorVisual();
+                PlayDoorUnlockVfx();
+            }
         }
 
         if (tokens.TryGetValue(playerPosition, out GameObject tokenObj))
@@ -834,7 +842,108 @@ public class GridGameManager : MonoBehaviour
         }
 
         SpriteRenderer renderer = doorObject.GetComponent<SpriteRenderer>();
-        renderer.color = doorOpen ? new Color(0.2f, 0.8f, 0.2f) : new Color(0.8f, 0.2f, 0.2f);
+        renderer.sprite = ResolveDoorSprite(doorOpen);
+        renderer.color = Color.white;
+    }
+
+    private Sprite ResolveDoorSprite(bool open)
+    {
+        if (open)
+        {
+            Sprite opened = LoadSprite(SpriteCatalog.ObjectsFolder, SpriteCatalog.ObjectDoorOpened);
+            if (opened != null)
+            {
+                return opened;
+            }
+        }
+
+        Sprite closed = LoadSprite(SpriteCatalog.ObjectsFolder, SpriteCatalog.ObjectDoor);
+        return closed != null ? closed : squareSprite;
+    }
+
+    private void PlayDoorUnlockVfx()
+    {
+        if (doorObject == null)
+        {
+            return;
+        }
+
+        Transform doorTransform = doorObject.transform;
+        Vector3 worldPosition = doorTransform.position;
+
+        GameObject vfxObject = new GameObject("DoorUnlockVfx");
+        vfxObject.transform.SetParent(levelRoot.transform, false);
+        vfxObject.transform.position = worldPosition + new Vector3(0f, tileSize * 0.15f, 0f);
+
+        ParticleSystem particles = vfxObject.AddComponent<ParticleSystem>();
+        ParticleSystem.MainModule main = particles.main;
+        main.loop = false;
+        main.playOnAwake = false;
+        main.duration = 0.3f;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.2f, 0.35f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.8f, 1.4f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.16f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.85f, 0.2f), new Color(0.9f, 0.4f, 0.9f));
+        main.gravityModifier = 0.6f;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+
+        ParticleSystem.EmissionModule emission = particles.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[]
+        {
+            new ParticleSystem.Burst(0f, (short)Random.Range(10, 21))
+        });
+
+        ParticleSystem.ShapeModule shape = particles.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Circle;
+        shape.radius = 0.15f;
+
+        ParticleSystemRenderer particleRenderer = particles.GetComponent<ParticleSystemRenderer>();
+        particleRenderer.renderMode = ParticleSystemRenderMode.Billboard;
+        particleRenderer.sortingOrder = 3;
+
+        particles.Play();
+        Destroy(vfxObject, 1f);
+
+        if (doorBounceRoutine != null)
+        {
+            StopCoroutine(doorBounceRoutine);
+        }
+        doorBounceRoutine = StartCoroutine(PlayDoorBounce(doorTransform));
+    }
+
+    private IEnumerator PlayDoorBounce(Transform target)
+    {
+        if (target == null)
+        {
+            yield break;
+        }
+
+        Vector3 baseScale = target.localScale;
+        Vector3 peakScale = baseScale * 1.15f;
+        float upDuration = 0.07f;
+        float downDuration = 0.09f;
+        float elapsed = 0f;
+
+        while (elapsed < upDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / upDuration);
+            target.localScale = Vector3.Lerp(baseScale, peakScale, t);
+            yield return null;
+        }
+
+        elapsed = 0f;
+        while (elapsed < downDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / downDuration);
+            target.localScale = Vector3.Lerp(peakScale, baseScale, t);
+            yield return null;
+        }
+
+        target.localScale = baseScale;
     }
 
     private void ApplySpriteOrFallback(SpriteRenderer renderer, string folder, string spriteName, Color fallbackColor)
