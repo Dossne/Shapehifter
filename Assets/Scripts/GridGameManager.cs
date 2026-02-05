@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -92,7 +93,8 @@ public class GridGameManager : MonoBehaviour
     [Header("Level Setup")]
     [SerializeField] private int shapeshiftsPerLevel = 5;
     [SerializeField] private float tileSize = 1f;
-    [SerializeField] private string[] levelNames = { "level1", "level2", "level3", "level4" };
+
+    private readonly List<TextAsset> levelAssets = new List<TextAsset>();
 
     private readonly Dictionary<Vector2Int, TileType> tiles = new Dictionary<Vector2Int, TileType>();
     private readonly Dictionary<Vector2Int, GameObject> boulders = new Dictionary<Vector2Int, GameObject>();
@@ -145,6 +147,7 @@ public class GridGameManager : MonoBehaviour
         CreateSprite();
         CreateHud();
         EnsureMobileInput();
+        DiscoverLevels();
         LoadLevel(0);
     }
 
@@ -321,9 +324,127 @@ public class GridGameManager : MonoBehaviour
         mobileInput.Initialize(this, hudRectTransform, hudCanvas);
     }
 
+    private void DiscoverLevels()
+    {
+        levelAssets.Clear();
+        TextAsset[] discovered = Resources.LoadAll<TextAsset>("Levels");
+        if (discovered == null || discovered.Length == 0)
+        {
+            Debug.LogError("No levels found in Resources/Levels.");
+            return;
+        }
+
+        levelAssets.AddRange(discovered);
+        levelAssets.Sort(CompareLevelAssets);
+
+        List<string> levelNames = new List<string>();
+        foreach (TextAsset asset in levelAssets)
+        {
+            if (asset != null)
+            {
+                levelNames.Add(asset.name);
+            }
+        }
+
+        Debug.Log("Discovered levels: " + string.Join(", ", levelNames));
+    }
+
+    private int CompareLevelAssets(TextAsset left, TextAsset right)
+    {
+        string leftName = left != null ? left.name : string.Empty;
+        string rightName = right != null ? right.name : string.Empty;
+        return CompareLevelNames(leftName, rightName);
+    }
+
+    private int CompareLevelNames(string left, string right)
+    {
+        bool leftHasNumber = TryExtractNumber(left, out int leftNumber);
+        bool rightHasNumber = TryExtractNumber(right, out int rightNumber);
+
+        if (leftHasNumber && rightHasNumber)
+        {
+            int numberComparison = leftNumber.CompareTo(rightNumber);
+            if (numberComparison != 0)
+            {
+                return numberComparison;
+            }
+        }
+        else if (leftHasNumber != rightHasNumber)
+        {
+            return leftHasNumber ? -1 : 1;
+        }
+
+        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool TryExtractNumber(string name, out int number)
+    {
+        number = 0;
+        if (string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < name.Length; i++)
+        {
+            if (!char.IsDigit(name[i]))
+            {
+                continue;
+            }
+
+            int start = i;
+            while (i < name.Length && char.IsDigit(name[i]))
+            {
+                i++;
+            }
+
+            string digits = name.Substring(start, i - start);
+            return int.TryParse(digits, out number);
+        }
+
+        return false;
+    }
+
     private void LoadLevel(int index)
     {
-        currentLevelIndex = Mathf.Clamp(index, 0, levelNames.Length - 1);
+        if (levelAssets.Count == 0)
+        {
+            Debug.LogError("No levels available to load.");
+            return;
+        }
+
+        int normalizedIndex = Mod(index, levelAssets.Count);
+        LoadLevelInternal(normalizedIndex, 0);
+    }
+
+    private void LoadLevelInternal(int index, int attempts)
+    {
+        if (attempts >= levelAssets.Count)
+        {
+            Debug.LogError("No valid levels could be loaded.");
+            return;
+        }
+
+        TextAsset levelAsset = levelAssets[index];
+        if (levelAsset == null)
+        {
+            Debug.LogError("Missing level asset at index " + index + ".");
+            LoadLevelInternal(Mod(index + 1, levelAssets.Count), attempts + 1);
+            return;
+        }
+
+        if (!TryBuildLevel(levelAsset))
+        {
+            Debug.LogError("Malformed level skipped: " + levelAsset.name);
+            LoadLevelInternal(Mod(index + 1, levelAssets.Count), attempts + 1);
+            return;
+        }
+
+        currentLevelIndex = index;
+    }
+
+    private bool TryBuildLevel(TextAsset levelAsset)
+    {
         shapeshiftsRemaining = shapeshiftsPerLevel;
         hasKey = false;
         doorOpen = false;
@@ -342,13 +463,6 @@ public class GridGameManager : MonoBehaviour
         doorObject = null;
         levelRoot = new GameObject("LevelRoot");
 
-        TextAsset levelAsset = Resources.Load<TextAsset>("Levels/" + levelNames[currentLevelIndex]);
-        if (levelAsset == null)
-        {
-            Debug.LogError("Missing level: " + levelNames[currentLevelIndex]);
-            return;
-        }
-
         string[] lines = levelAsset.text.Replace("\r", string.Empty).Split('\n');
         List<string> rows = new List<string>();
         tutorialLine = lines.Length > 0 ? lines[0].TrimEnd() : string.Empty;
@@ -361,6 +475,12 @@ public class GridGameManager : MonoBehaviour
             }
         }
 
+        if (rows.Count == 0)
+        {
+            Debug.LogError("Level has no grid rows: " + levelAsset.name);
+            return false;
+        }
+
         levelHeight = rows.Count;
         levelWidth = 0;
         foreach (string row in rows)
@@ -371,6 +491,7 @@ public class GridGameManager : MonoBehaviour
             }
         }
 
+        bool playerFound = false;
         for (int y = 0; y < rows.Count; y++)
         {
             string row = rows[y];
@@ -378,11 +499,22 @@ public class GridGameManager : MonoBehaviour
             {
                 char cell = row[x];
                 Vector2Int gridPosition = new Vector2Int(x, -y);
+                if (cell == 'P')
+                {
+                    playerFound = true;
+                }
                 ParseCell(cell, gridPosition);
             }
         }
 
+        if (!playerFound)
+        {
+            Debug.LogError("Level has no player start: " + levelAsset.name);
+            return false;
+        }
+
         UpdateHud();
+        return true;
     }
 
     private void ParseCell(char cell, Vector2Int position)
@@ -993,8 +1125,25 @@ public class GridGameManager : MonoBehaviour
 
     private void LoadNextLevel()
     {
-        int nextIndex = (currentLevelIndex + 1) % levelNames.Length;
+        if (levelAssets.Count == 0)
+        {
+            Debug.LogError("No levels available to load.");
+            return;
+        }
+
+        int nextIndex = Mod(currentLevelIndex + 1, levelAssets.Count);
         LoadLevel(nextIndex);
+    }
+
+    private int Mod(int value, int modulus)
+    {
+        if (modulus <= 0)
+        {
+            return 0;
+        }
+
+        int result = value % modulus;
+        return result < 0 ? result + modulus : result;
     }
 
     private bool IsInLevel(Vector2Int position)
