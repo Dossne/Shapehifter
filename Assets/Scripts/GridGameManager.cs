@@ -497,6 +497,7 @@ public class GridGameManager : MonoBehaviour
             SpriteRenderer renderer = playerObject.AddComponent<SpriteRenderer>();
             renderer.sortingOrder = 2;
             playerObject.transform.localScale = Vector3.one * 0.85f;
+            playerObject.AddComponent<ShapeshiftVfxController>();
         }
 
         playerObject.transform.SetParent(levelRoot.transform, false);
@@ -688,9 +689,22 @@ public class GridGameManager : MonoBehaviour
             return;
         }
 
+        SpriteRenderer renderer = playerObject != null ? playerObject.GetComponent<SpriteRenderer>() : null;
+        Sprite previousSprite = renderer != null ? renderer.sprite : null;
+        Color previousColor = renderer != null ? renderer.color : Color.white;
+
         currentForm = nextForm;
         shapeshiftsRemaining--;
         UpdatePlayerVisual();
+
+        if (renderer != null)
+        {
+            ShapeshiftVfxController vfx = playerObject.GetComponent<ShapeshiftVfxController>();
+            if (vfx != null)
+            {
+                vfx.Play(previousSprite, previousColor, renderer.sprite, renderer.color);
+            }
+        }
         UpdateHud();
     }
 
