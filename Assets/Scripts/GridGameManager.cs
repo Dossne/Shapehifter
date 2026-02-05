@@ -1039,7 +1039,7 @@ public class GridGameManager : MonoBehaviour
         emission.rateOverTime = 0f;
         emission.SetBursts(new[]
         {
-            new ParticleSystem.Burst(0f, (short)Random.Range(10, 21))
+            new ParticleSystem.Burst(0f, (short)UnityEngine.Random.Range(10, 21))
         });
 
         ParticleSystem.ShapeModule shape = particles.shape;
