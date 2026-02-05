@@ -28,6 +28,7 @@ public class GridGameManager : MonoBehaviour
         public const string TokenFrog = "frog";
         public const string TokenGorilla = "gorilla";
         public const string TokenMole = "mole";
+        public const string TokenBubble = "bubble";
 
         public static readonly Dictionary<string, string> TileSprites = new Dictionary<string, string>
         {
@@ -465,7 +466,22 @@ public class GridGameManager : MonoBehaviour
     private void CreateToken(Vector2Int position, Form form, Color color)
     {
         string spriteKey = SpriteCatalog.FormToTokenKey[form];
-        GameObject obj = CreateSingleObject(position, spriteKey, color, SpriteCatalog.TokensFolder, SpriteCatalog.TokenSprites);
+        string spriteName = SpriteCatalog.TokenSprites[spriteKey];
+        GameObject obj = new GameObject("Object_" + position.x + "_" + position.y);
+        obj.transform.SetParent(levelRoot.transform, false);
+        obj.transform.localPosition = new Vector3(position.x * tileSize, position.y * tileSize, -0.1f);
+        obj.transform.localScale = Vector3.one;
+
+        Sprite iconSprite = LoadSprite(SpriteCatalog.TokensFolder, spriteName);
+        Color iconColor = iconSprite != null ? Color.white : color;
+        if (iconSprite == null)
+        {
+            iconSprite = squareSprite;
+        }
+
+        Sprite bubbleSprite = LoadSprite(SpriteCatalog.TokensFolder, SpriteCatalog.TokenBubble);
+        TokenVisual tokenVisual = obj.AddComponent<TokenVisual>();
+        tokenVisual.Configure(iconSprite, iconColor, bubbleSprite);
         tokens[position] = obj;
         obj.name = form + "Token";
     }
