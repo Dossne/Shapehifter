@@ -120,8 +120,8 @@ public class GridGameManager : MonoBehaviour
     private GameObject tutorialPanel;
     private GameObject statusPanel;
     private VerticalLayoutGroup hudLayoutGroup;
-    private readonly RectOffset hudPadding = new RectOffset(40, 40, 40, 20);
-    private readonly RectOffset hudPaddingCollapsed = new RectOffset(0, 0, 0, 0);
+    private RectOffset hudPadding;
+    private RectOffset hudPaddingCollapsed;
     private const float HudSpacing = 12f;
     private MobileInputController mobileInput;
     private Sprite squareSprite;
@@ -134,6 +134,8 @@ public class GridGameManager : MonoBehaviour
 
     private void Awake()
     {
+        hudPadding = new RectOffset(40, 40, 40, 20);
+        hudPaddingCollapsed = new RectOffset(0, 0, 0, 0);
         ConfigureOrientation();
         CreateSprite();
         CreateHud();
